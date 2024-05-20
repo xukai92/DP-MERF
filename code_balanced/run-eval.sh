@@ -1,0 +1,1 @@
+python3 synth_data_benchmark.py --data-log-name dpmerf_digits_exp --data digits

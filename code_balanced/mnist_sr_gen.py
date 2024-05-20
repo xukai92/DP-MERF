@@ -7,6 +7,7 @@ from models_gen import ConvCondGen
 from aux import plot_mnist_batch, meddistance, log_args, flat_data, log_final_score
 from data_loading import get_mnist_dataloaders
 from rff_mmd_approx import get_rff_losses
+from sliced_kl import get_sliced_losses
 from synth_data_benchmark import test_gen_data
 
 
@@ -105,6 +106,10 @@ def get_args():
 
   parser.add_argument('--flip-mnist', action='store_true', default=False, help='')
 
+  parser.add_argument('--sliced', action='store_true')
+  parser.add_argument('--n-slices', type=int, default=32, help='number of slices')
+  parser.add_argument('--d-slice', type=int, default=4, help='dimensionality of the slice')
+
   ar = parser.parse_args()
 
   preprocess_args(ar)
@@ -163,9 +168,12 @@ def main():
   gen = ConvCondGen(ar.d_code, ar.gen_spec, ar.n_labels, ar.n_channels, ar.kernel_sizes).to(device)
 
   # define loss function
-
-  sr_loss, mb_loss, _ = get_rff_losses(train_loader, n_feat, ar.d_rff, ar.rff_sigma, device, ar.n_labels, ar.noise_factor,
-                                       ar.mmd_type)
+  if ar.sliced:
+    # sr: single release, mb: mini-batch
+    sr_loss, mb_loss = get_sliced_losses(train_loader, 28*28, ar.n_slices, ar.d_slice, ar.noise_factor, "cpu")
+  else:
+    sr_loss, mb_loss, _ = get_rff_losses(train_loader, n_feat, ar.d_rff, ar.rff_sigma, device, ar.n_labels, ar.noise_factor,
+                                         ar.mmd_type)
 
   # rff_mmd_loss = get_rff_mmd_loss(n_feat, ar.d_rff, ar.rff_sigma, device, ar.n_labels, ar.noise_factor, ar.batch_size)
 

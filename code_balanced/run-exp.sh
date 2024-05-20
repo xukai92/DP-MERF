@@ -1,0 +1,1 @@
+python3 mnist_sr_gen.py --log-name dpmerf_digits_exp --data digits
