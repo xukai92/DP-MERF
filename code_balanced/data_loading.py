@@ -3,7 +3,7 @@ import numpy as np
 import torch as pt
 from collections import namedtuple
 from torchvision import transforms, datasets
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, TensorDataset, StackDataset
 from aux import flip_mnist_data
 from synth_data_2d import make_data_from_specstring, string_to_specs
 
@@ -35,7 +35,7 @@ def get_dataloaders(dataset_key, batch_size, test_batch_size, use_cuda, normaliz
 
 
 def get_mnist_dataloaders(batch_size, test_batch_size, use_cuda, normalize=False,
-                          dataset='digits', data_dir='data', flip=False, return_datasets=False):
+                          dataset='digits', data_dir='data', flip=False, return_datasets=False, include_index=False):
   if not os.path.exists(data_dir):
     os.makedirs(data_dir)
   kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
@@ -53,7 +53,9 @@ def get_mnist_dataloaders(batch_size, test_batch_size, use_cuda, normalize=False
       print(pt.max(trn_data.data))
       flip_mnist_data(trn_data)
       flip_mnist_data(tst_data)
-
+    if include_index:
+      trn_ix_data = TensorDataset(pt.tensor(list(range(len(trn_data)))))
+      trn_data = StackDataset(trn_data, trn_ix_data)
     train_loader = pt.utils.data.DataLoader(trn_data, batch_size=batch_size, shuffle=True, **kwargs)
     test_loader = pt.utils.data.DataLoader(tst_data, batch_size=test_batch_size, shuffle=True, **kwargs)
   elif dataset == 'fashion':

@@ -1,0 +1,9 @@
+*.pt
+*.pyc
+*.npy
+*.gz
+*.png
+*.npz
+*-ubyte
+*_log
+*_score

@@ -234,16 +234,19 @@ def get_sliced_losses(train_loader, d, n_KL_slices, n_KL_slice_dim, epsilon, dev
                                     slice_dim=n_KL_slice_dim)
         wd_clf = 1
         loss_g = wd_clf * kl
-
-    # TODO figure out how to update below so to account for the entire training set
-    for data, labels in train_loader:
-        data, labels = data.to(device), labels.to(device)
-        data = flat_data(data, labels, device, n_labels=10, add_label=False)
-        break
-    sinlge_data_enc = data
+        return loss_g
+    
+    train_loader_iter_singleton = [iter(train_loader)] # wrap as a lst for easy change in place
     sinlge_labels = None
 
     def single_release_loss(gen_enc, gen_labels):
-        return minibatch_loss(sinlge_data_enc, sinlge_labels, gen_enc, gen_labels, sigma_noise)
+        try:
+            (data, labels), (ix,) = next(train_loader_iter_singleton[0])
+        except StopIteration:
+            train_loader_iter_singleton[0] = iter(train_loader)
+            (data, labels), (ix,) = next(train_loader_iter_singleton[0])
+        data = data.to(device)
+        sinlge_data_enc = flat_data(data, labels, device, n_labels=10, add_label=False)
+        return minibatch_loss(sinlge_data_enc, sinlge_labels, gen_enc, gen_labels, X_noise_kmm=noise_data_kmm[:,ix,:])
 
     return single_release_loss, minibatch_loss

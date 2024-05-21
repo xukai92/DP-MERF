@@ -107,8 +107,8 @@ def get_args():
   parser.add_argument('--flip-mnist', action='store_true', default=False, help='')
 
   parser.add_argument('--sliced', action='store_true')
-  parser.add_argument('--n-slices', type=int, default=32, help='number of slices')
-  parser.add_argument('--d-slice', type=int, default=4, help='dimensionality of the slice')
+  parser.add_argument('--n-slices', type=int, default=100, help='number of slices')
+  parser.add_argument('--d-slice', type=int, default=5, help='dimensionality of the slice')
 
   ar = parser.parse_args()
 
@@ -162,7 +162,7 @@ def main():
 
   # load data
   train_loader, test_loader = get_mnist_dataloaders(ar.batch_size, ar.test_batch_size, use_cuda, dataset=ar.data,
-                                                    flip=ar.flip_mnist)
+                                                    flip=ar.flip_mnist, include_index=ar.sliced)
 
   # init model
   gen = ConvCondGen(ar.d_code, ar.gen_spec, ar.n_labels, ar.n_channels, ar.kernel_sizes).to(device)
@@ -170,7 +170,7 @@ def main():
   # define loss function
   if ar.sliced:
     # sr: single release, mb: mini-batch
-    sr_loss, mb_loss = get_sliced_losses(train_loader, 28*28, ar.n_slices, ar.d_slice, ar.noise_factor, "cpu")
+    sr_loss, mb_loss = get_sliced_losses(train_loader, n_feat, ar.n_slices, ar.d_slice, ar.noise_factor, device)
   else:
     sr_loss, mb_loss, _ = get_rff_losses(train_loader, n_feat, ar.d_rff, ar.rff_sigma, device, ar.n_labels, ar.noise_factor,
                                          ar.mmd_type)
