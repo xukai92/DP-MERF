@@ -195,7 +195,8 @@ def get_sliced_losses(train_loader, d, n_KL_slices, n_KL_slice_dim, epsilon, dev
 
     kldiv = slicedKLclass(d,n_KL_slices,n_KL_slice_dim,device).to(device)
     noise_data_kmm = torch.randn(n_KL_slices, data_size, n_KL_slice_dim).to(device)
-    sigma_noise = calc_sigma(epsilon, d, n_KL_slices, n_KL_slice_dim, delta=None, data_size=data_size)
+    # delta = 1e-5
+    sigma_noise = calc_sigma(epsilon, d, n_KL_slices, n_KL_slice_dim, data_size=data_size)
     maxi_maxi_norm = None
 
     def minibatch_loss(data_enc, labels, gen_enc, gen_labels, X_noise_kmm=None):
@@ -215,7 +216,7 @@ def get_sliced_losses(train_loader, d, n_KL_slices, n_KL_slice_dim, epsilon, dev
         #if epoch > epoch_to_start_align:
         with torch.no_grad():
             maxi_norm = torch.sqrt(torch.max(torch.sum(real_cat.view(real_cat.shape[0], -1)**2,dim=1))).to(device)
-            # TODO make below work
+            # TODO find this maxi_norm during "pre-processing"
             #-if maxi_norm > maxi_maxi_norm and id_ == 0:
             #-    maxi_maxi_norm = maxi_norm
             maxi_maxi_norm = maxi_norm

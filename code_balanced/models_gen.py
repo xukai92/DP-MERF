@@ -200,6 +200,7 @@ class ConvCondGen(nn.Module):
   def get_code(self, batch_size, device, return_labels=True, labels=None):
     if labels is None:  # sample labels
       labels = pt.randint(self.n_labels, (batch_size, 1), device=device)
+      labels *= 0
     code = pt.randn(batch_size, self.d_code, device=device)
     gen_one_hots = pt.zeros(batch_size, self.n_labels, device=device)
     gen_one_hots.scatter_(1, labels, 1)

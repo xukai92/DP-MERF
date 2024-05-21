@@ -48,6 +48,7 @@ def data_label_embedding(data, labels, rff_params, mmd_type,
                          labels_to_one_hot=False, n_labels=None, device=None, reduce='mean'):
   assert reduce in {'mean', 'sum'}
   if labels_to_one_hot:
+    labels *= 0
     batch_size = data.shape[0]
     one_hots = pt.zeros(batch_size, n_labels, device=device)
     one_hots.scatter_(1, labels[:, None], 1)
