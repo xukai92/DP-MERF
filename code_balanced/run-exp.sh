@@ -39,8 +39,50 @@ export CUDA_VISIBLE_DEVICES="1"
 #     done
 # done
 
+# python3 mnist_sr_gen.py \
+#     --data digits \
+#     --log-name sliced_digits_exp-debug \
+#     --d-code 20 --epochs 100 --batch-size 400 --lr 5e-4 --noise-factor 1000.0 \
+#     --sliced --n-slices 10 --d-slice 100 --d-rff 20000
+
+# for noise_factor in 0.2 1.0 5.0 25.0
+# do
+#     for n_slices in 100
+#     do
+#         python3 mnist_sr_gen.py \
+#             --data digits \
+#             --log-name sliced-dpmerf_digits_exp-epsilon=$noise_factor-n_slices=$n_slices \
+#             --d-code 20 --epochs 25 --batch-size 400 --lr 5e-4 --noise-factor $noise_factor \
+#             --sliced --n-slices $n_slices --d-slice 20 --d-rff 20000
+#     done
+# done
+
+# for noise_factor in 0.2 1.0 5.0 25.0
+# do
+#     for n_slices in 50
+#     do
+#         python3 mnist_sr_gen.py \
+#             --data digits \
+#             --log-name sliced-dpmerf_digits_exp-epsilon=$noise_factor-n_slices=$n_slices \
+#             --d-code 20 --epochs 25 --batch-size 400 --lr 5e-4 --noise-factor $noise_factor \
+#             --sliced --n-slices $n_slices --d-slice 5 --d-rff 20000
+#     done
+# done
+
+# for noise_factor in 0.2 1.0 5.0 25.0
+# do
+#     for n_slices in 20
+#     do
+#         python3 mnist_sr_gen.py \
+#             --data digits \
+#             --log-name sliced-dpmerf_digits_exp-epsilon=$noise_factor-n_slices=$n_slices \
+#             --d-code 20 --epochs 25 --batch-size 400 --lr 5e-4 --noise-factor $noise_factor \
+#             --sliced --n-slices $n_slices --d-slice 5 --d-rff 20000
+#     done
+# done
+
 python3 mnist_sr_gen.py \
     --data digits \
-    --log-name sliced_digits_exp-debug \
-    --d-code 20 --epochs 100 --batch-size 400 --lr 5e-4 --noise-factor 5.0 \
-    --sliced --n-slices 200 --d-slice 5
+    --log-name sliced-wass_digits_exp-debug \
+    --d-code 20 --epochs 100 --batch-size 400 --lr 2e-3 --noise-factor 10.0 \
+    --sliced --n-slices 1000 --d-slice 1 --d-rff 20000

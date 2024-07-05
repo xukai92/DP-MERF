@@ -170,7 +170,7 @@ def main():
   # define loss function
   if ar.sliced:
     # sr: single release, mb: mini-batch
-    sr_loss, mb_loss = get_sliced_losses(train_loader, n_feat, ar.n_slices, ar.d_slice, ar.noise_factor, device)
+    sr_loss, mb_loss = get_sliced_losses(train_loader, n_feat, ar.d_rff, ar.rff_sigma, ar.mmd_type, ar.n_slices, ar.d_slice, ar.noise_factor, device)
   else:
     sr_loss, mb_loss, _ = get_rff_losses(train_loader, n_feat, ar.d_rff, ar.rff_sigma, device, ar.n_labels, ar.noise_factor,
                                          ar.mmd_type)

@@ -39,7 +39,7 @@ def get_mnist_dataloaders(batch_size, test_batch_size, use_cuda, normalize=False
   if not os.path.exists(data_dir):
     os.makedirs(data_dir)
   kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
-  transforms_list = [transforms.ToTensor()]
+  transforms_list = [transforms.ToTensor(), lambda x: pt.where(x > 0.5, 0.999, 0.001)]
   if dataset == 'digits':
     if normalize:
       mnist_mean = 0.1307

@@ -3,8 +3,13 @@ import numpy as np
 import torch
 
 from aux import flat_data
+from rff_mmd_approx import weights_sphere, weights_rahimi_recht, rff_sphere, rff_rahimi_recht
 from slicedKL import slicedKLclass
 
+
+def data_label_embedding_no_reduce(data, rff_params, mmd_type):
+  data_embedding = rff_sphere(data, rff_params) if mmd_type == 'sphere' else rff_rahimi_recht(data, rff_params)
+  return data_embedding
 
 #mmd util start
 def euclidsq(x, y):
@@ -112,13 +117,16 @@ def sliced_kl_kmm_diff_priv(first_samples,
         # A heuristic is to use the median of pairwise distances as σ, suggested by Sugiyama's book
         diff = torch.linalg.vector_norm(first_projections,dim=2) # - second_projections)**2 #n_slice * batch * slice_dim
         sigma = torch.sqrt(torch.median(diff**2))
+        sigma = 20
         #print("heuristic sigma: ", sigma)
         #sigmaprime = torch.sqrt(torch.median(second_projections**2))
         #print((sigma - sigmaprime)/sigma)
         
         
         c = 2
-        σs = sigma*torch.as_tensor([1/c,0.333/c,0.2/c,5/c,3/c,.1/c],device=device)
+        # σs = sigma*torch.as_tensor([1/c,0.333/c,0.2/c,5/c,3/c,.1/c],device=device)
+        σs = sigma*torch.as_tensor([1/c,0.333/c,3/c],device=device)
+        # σs = sigma*torch.as_tensor([1/c],device=device)
     
     def ratio_func(first,second):
         return estimate_ratio_compute_mmd(first,second,σs = σs)
@@ -135,10 +143,47 @@ def sliced_kl_kmm_diff_priv(first_samples,
     epsilon=torch.full(ratio.size(),1e-10,device=device)
     ratio = torch.maximum(ratio,epsilon)
     #print(torch.log(ratio))
-    kl = torch.mean(ratio*torch.log(ratio))
-    #chi_squared = torch.mean(torch.pow(ratio-1,2))
-    return kl
+    # kl = torch.mean(ratio*torch.log(ratio))
+    # return kl
+    chi_squared = torch.mean(torch.pow(ratio-1,2))
+    return chi_squared
 #mmd util end
+
+def sliced_wasserstein_distance_diff_priv(first_samples,
+                                second_samples,
+                                thetas,
+                                p=1,                                
+                                device='cuda',
+                                sigma_proj=1,
+                                sigma_noise = 1,
+                                noise_samples=None
+                                ):
+    # first samples are the data to protect
+    # second samples are the data_fake
+    
+    #first_samples, second_samples = make_sample_size_equal(first_samples, second_samples)
+
+    #dim = second_samples.size(1)
+    nb_sample = second_samples.size(0)
+    #projections = rand_projections_diff_priv(dim, num_projections,sigma_proj)
+    #projections = projections.to(device)
+    noise2 = torch.randn((nb_sample,thetas.shape[0])).to(device)*sigma_noise
+    # noise2 = noise2.to(device)
+    if noise_samples is not None:
+        noise = noise_samples.to(device) * sigma_noise
+        # noise = noise.to(device)  
+    else:
+        noise = torch.randn((nb_sample,thetas.shape[0])).to(device)*sigma_noise
+        # noise = noise.to(device)    
+    #print(first_samples.shape)
+    #print(second_samples.shape)
+    first_projections = torch.matmul(first_samples,torch.transpose(thetas[:,0,:], 0,1)) + noise 
+    second_projections = torch.matmul(second_samples,torch.transpose(thetas[:,0,:], 0,1)) + noise2 
+    # print(first_projections.shape, second_projections.shape)
+    wasserstein_distance = torch.abs((torch.sort(first_projections.transpose(0, 1), dim=1)[0] -
+                                      torch.sort(second_projections.transpose(0, 1), dim=1)[0]))
+    wasserstein_distance = torch.pow(torch.mean(torch.pow(wasserstein_distance, p), dim=1), 1. / p) # averaging the sorted distance
+    return torch.pow(torch.pow(wasserstein_distance, p).mean(), 1. / p)  # averaging over the random direction
 
 def calc_sigma(epsilon, d, n_KL_slices,n_KL_slice_dim, delta=None, data_size=None):
     assert delta is not None or data_size is not None, "either delta or data_size has to be provided"
@@ -190,21 +235,35 @@ def calc_sigma(epsilon, d, n_KL_slices,n_KL_slice_dim, delta=None, data_size=Non
     ################################################
     return sigma_noise
 
-def get_sliced_losses(train_loader, d, n_KL_slices, n_KL_slice_dim, epsilon, device):
+def get_sliced_losses(train_loader, d, d_rff, rff_sigma, mmd_type, n_KL_slices, n_KL_slice_dim, epsilon, device):
+    d_enc = d
+    d = d_rff
+    assert d_rff % 2 == 0
+    assert isinstance(rff_sigma, str)
+    rff_sigma = [float(sig) for sig in rff_sigma.split(',')]
+    if mmd_type == 'sphere':
+        w_freq = weights_sphere(d_rff, d_enc, rff_sigma, device)
+    else:
+        w_freq = weights_rahimi_recht(d_rff, d_enc, rff_sigma, device)
     data_size = len(train_loader.dataset)
 
     kldiv = slicedKLclass(d,n_KL_slices,n_KL_slice_dim,device).to(device)
-    noise_data_kmm = torch.randn(n_KL_slices, data_size, n_KL_slice_dim).to(device)
+    # noise_data_kmm = torch.randn(n_KL_slices, data_size, n_KL_slice_dim).to(device)
+    noise_data_kmm = torch.randn(data_size, n_KL_slices * n_KL_slice_dim).to(device)
     # delta = 1e-5
     sigma_noise = calc_sigma(epsilon, d, n_KL_slices, n_KL_slice_dim, data_size=data_size)
-    maxi_maxi_norm = None
+    maxi_maxi_norm_singleton = [None]
 
+    rff_params = w_freq
     def minibatch_loss(data_enc, labels, gen_enc, gen_labels, X_noise_kmm=None):
         c1 = None
         real_cat = data_enc
         fakeact = gen_enc
+        real_cat = data_label_embedding_no_reduce(real_cat, rff_params, mmd_type)
+        fakeact = data_label_embedding_no_reduce(fakeact, rff_params, mmd_type)
         if X_noise_kmm is None:
-            X_noise_kmm = torch.randn(n_KL_slices, real_cat.shape[0], n_KL_slice_dim).to(device)
+            # X_noise_kmm = torch.randn(n_KL_slices, real_cat.shape[0], n_KL_slice_dim).to(device)
+            X_noise_kmm = torch.randn(real_cat.shape[0], n_KL_slices * n_KL_slice_dim).to(device)
 
         if c1 is not None:
             fakey = torch.cat([fakeact, c1], dim=1)
@@ -216,25 +275,34 @@ def get_sliced_losses(train_loader, d, n_KL_slices, n_KL_slice_dim, epsilon, dev
         #if epoch > epoch_to_start_align:
         with torch.no_grad():
             maxi_norm = torch.sqrt(torch.max(torch.sum(real_cat.view(real_cat.shape[0], -1)**2,dim=1))).to(device)
-            # TODO find this maxi_norm during "pre-processing"
-            #-if maxi_norm > maxi_maxi_norm and id_ == 0:
-            #-    maxi_maxi_norm = maxi_norm
-            maxi_maxi_norm = maxi_norm
+            if maxi_maxi_norm_singleton[0] is None or maxi_norm > maxi_maxi_norm_singleton[0]:
+                maxi_maxi_norm_singleton[0] = maxi_norm
+            maxi_maxi_norm = maxi_maxi_norm_singleton[0]
 
         source_features_norm = torch.div(real_cat,1) #(2*maxi_norm))
         target_features_norm = torch.div(fakey,1) #(2*maxi_norm))
         
-        kl = sliced_kl_kmm_diff_priv(source_features_norm.view(source_features_norm.shape[0], -1), 
-                                    target_features_norm.view(target_features_norm.shape[0], -1),
-                                    kldiv.thetas,
-                                    2,
-                                    device,
-                                    sigma_noise=sigma_noise * 2 * maxi_maxi_norm, 
-                                    noise_samples=X_noise_kmm,
-                                    n_slice=n_KL_slices, 
-                                    slice_dim=n_KL_slice_dim)
-        wd_clf = 1
-        loss_g = wd_clf * kl
+        # kl = sliced_kl_kmm_diff_priv(source_features_norm.view(source_features_norm.shape[0], -1), 
+        #                             target_features_norm.view(target_features_norm.shape[0], -1),
+        #                             kldiv.thetas,
+        #                             2,
+        #                             device,
+        #                             sigma_noise=sigma_noise * 2 * maxi_maxi_norm, 
+        #                             noise_samples=X_noise_kmm,
+        #                             n_slice=n_KL_slices, 
+        #                             slice_dim=n_KL_slice_dim)
+        # wd_clf = 1
+        # loss_g = wd_clf * kl
+
+        loss_g = sliced_wasserstein_distance_diff_priv(
+            source_features_norm.view(source_features_norm.shape[0], -1), 
+            target_features_norm.view(target_features_norm.shape[0], -1),
+            kldiv.thetas,
+            2,
+            device,
+            sigma_noise=sigma_noise * 2 * maxi_maxi_norm, 
+            noise_samples=X_noise_kmm)
+
         return loss_g
     
     train_loader_iter_singleton = [iter(train_loader)] # wrap as a lst for easy change in place
@@ -248,6 +316,7 @@ def get_sliced_losses(train_loader, d, n_KL_slices, n_KL_slice_dim, epsilon, dev
             (data, labels), (ix,) = next(train_loader_iter_singleton[0])
         data = data.to(device)
         sinlge_data_enc = flat_data(data, labels, device, n_labels=10, add_label=False)
-        return minibatch_loss(sinlge_data_enc, sinlge_labels, gen_enc, gen_labels, X_noise_kmm=noise_data_kmm[:,ix,:])
+        # return minibatch_loss(sinlge_data_enc, sinlge_labels, gen_enc, gen_labels, X_noise_kmm=noise_data_kmm[:,ix,:])
+        return minibatch_loss(sinlge_data_enc, sinlge_labels, gen_enc, gen_labels, X_noise_kmm=noise_data_kmm[ix,:])
 
     return single_release_loss, minibatch_loss
